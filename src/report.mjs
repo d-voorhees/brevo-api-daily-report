@@ -134,15 +134,19 @@ async function fetchTransactionalEmails(apiKey, windowStart, windowEnd) {
     });
 
     if (!res.ok) {
-      if (res.status === 401) {
-        throw new Error(
-          'Brevo API request failed with status 401 (unauthorized). BREVO_API_KEY was sent but Brevo rejected it. ' +
-            'Check: the GitHub secret value matches the key exactly (no truncation or extra whitespace from copy-paste), ' +
-            'the key has not been regenerated or deleted in Brevo since it was saved as a secret, ' +
-            'and the secret is actually named BREVO_API_KEY (GitHub secret names are case-sensitive).'
-        );
+      // Surface Brevo's own error code/message (never the full body, which
+      // could in principle echo back other fields) so failures are
+      // diagnosable from the one thing we can safely log: what Brevo said.
+      let brevoDetail = '';
+      try {
+        const errorBody = await res.json();
+        if (errorBody && (errorBody.code || errorBody.message)) {
+          brevoDetail = ` Brevo says: ${[errorBody.code, errorBody.message].filter(Boolean).join(' — ')}`;
+        }
+      } catch {
+        // Response body wasn't JSON; fall through with no extra detail.
       }
-      throw new Error(`Brevo API request failed with status ${res.status}`);
+      throw new Error(`Brevo API request failed with status ${res.status}.${brevoDetail}`);
     }
 
     const body = await res.json();

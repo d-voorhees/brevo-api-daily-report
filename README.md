@@ -52,6 +52,8 @@ git push -u origin main
 3. Click **Generate a new API key**, name it (e.g. "Daily Report"), and copy it.
 4. You'll paste this in as the `BREVO_API_KEY` secret in step 4.
 
+**Turn off IP restrictions, or this will fail.** If your Brevo account has **Authorised IPs** enabled (Settings → Security → Authorised IPs), Brevo will reject every API call from an IP it doesn't recognize, including GitHub Actions. GitHub-hosted runners don't have a fixed IP — it's a different one on every run, pulled from a large, rotating range — so there's no single IP you can add to the allowlist to fix this. Go to https://app.brevo.com/security/authorised_ips and disable the restriction (or scope it so it only applies to dashboard logins, not API access, if your account offers that option). If this is left on, every run will fail with a 401 that reads like an invalid key, even though the key is correct.
+
 ### 3. Get Brevo SMTP credentials
 
 These are separate from the API key above. You need both.
