@@ -4,6 +4,8 @@ A small script that emails you a nightly summary of transactional emails sent th
 
 For the reasoning behind the timezone handling and the pagination approach, see the [companion blog post](INSERT-BLOG-URL-HERE).
 
+Current version: **1.1.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+
 ## What it does
 
 Once a night, a GitHub Action:
@@ -138,8 +140,9 @@ Go to the repo's **Actions** tab → **Brevo Daily Report** → **Run workflow**
 
 ## Scheduling notes
 
-- Scheduled (cron) runs only send a report when the current local time in `America/Denver` is within the 10 PM hour. That check is what prevents duplicate reports across the two UTC cron schedules needed to cover both MDT and MST.
-- GitHub Actions scheduled jobs are not guaranteed to start exactly on the cron minute; a delay of a few minutes is normal. The reporting window itself is always calculated from the intended 10:00 PM boundary, not the actual runner start time.
+- Two cron schedules fire every night, one written for MDT and one for MST. On each run, the script checks which cron triggered it (via `github.event.schedule`) against Denver's actual current UTC offset, and only the schedule matching today's real offset sends. The other exits without sending. This is what prevents duplicate reports.
+- That match is offset-based, not clock-based, so a late-starting run still sends correctly. GitHub Actions gives no guarantee that a scheduled job starts exactly on time; a delay of a few minutes is normal, and this design tolerates far longer delays without skipping the night.
+- The reporting window itself is always calculated from the intended 10:00 PM boundary, not the actual runner start time.
 
 ## Testing
 
@@ -152,9 +155,9 @@ There is no automated test suite. The script's real dependencies are the Brevo A
 
 **Brevo's `/smtp/emails` log endpoint over the aggregated stats endpoint.** The aggregated report only returns totals, not who received what, and the detail list at the bottom needs per-recipient rows. The log endpoint's `startDate`/`endDate` filters are date-only, not timestamp-precise, so the script requests a day of buffer on each side and filters the exact 10 PM to 10 PM window client-side against each record's real timestamp.
 
-**Two cron schedules instead of one.** GitHub Actions cron runs in UTC and does not shift for daylight saving time. Covering a fixed 10 PM Mountain Time target year-round means scheduling both the MDT and MST equivalents, with the script checking the current Denver hour and skipping the run that lands outside 10 PM. GitHub Actions has no dynamic, timezone-aware cron option.
+**Two cron schedules instead of one.** GitHub Actions cron runs in UTC and does not shift for daylight saving time. Covering a fixed 10 PM Mountain Time target year-round means scheduling both the MDT and MST equivalents, with the script matching whichever one fired against Denver's actual current offset and skipping the one that doesn't match. GitHub Actions has no dynamic, timezone-aware cron option.
 
-**No stored "last sent" state.** The duplicate-send guard is a clock check, not a database flag or file. That keeps the project free of any persistence layer, at the cost of depending on the two schedules landing an hour apart, which they do by construction.
+**No stored "last sent" state.** The duplicate-send guard is an offset comparison, not a database flag or file. That keeps the project free of any persistence layer, and unlike a wall-clock check, it holds even when a run starts hours late.
 
 **No retries.** A failed Brevo call or SMTP send fails the whole run and shows up as a red X in the Actions tab. For a once-a-night internal report, a visible failure beats a retry that risks resending part of an already-processed window.
 

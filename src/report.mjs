@@ -81,10 +81,30 @@ function buildReportingWindow() {
 
 // ---- Scheduled-run duplicate-send guard ----
 
+// Each cron entry in the workflow assumes a fixed Denver UTC offset (see
+// brevo-daily-report.yml). GitHub Actions gives no on-time guarantee for
+// scheduled runs, so gating on "did we happen to start during the 22:00
+// hour" can miss a delayed run entirely. Instead, match the schedule that
+// actually fired (github.event.schedule, passed through as an env var)
+// against today's real Denver offset. That check holds regardless of how
+// late the run starts, as long as it starts before the following day.
+const SCHEDULE_OFFSET_MINUTES = {
+  '0 4 * * *': -360, // MDT, UTC-6
+  '0 5 * * *': -420, // MST, UTC-7
+};
+
 function shouldSkipScheduledRun() {
   if (process.env.GITHUB_EVENT_NAME !== 'schedule') return false;
-  const nowLocal = getDenverParts(new Date());
-  return nowLocal.hour !== 22;
+  const schedule = (process.env.GITHUB_EVENT_SCHEDULE || '').trim();
+  const expectedOffset = SCHEDULE_OFFSET_MINUTES[schedule];
+  if (expectedOffset === undefined) {
+    // Unrecognized or missing schedule identifier: fail open. A missed
+    // report is worse than an occasional extra one from a bad match.
+    return false;
+  }
+  // denverOffsetMinutes carries sub-second float noise from the current
+  // instant's milliseconds; round to the nearest minute before comparing.
+  return Math.round(denverOffsetMinutes(new Date())) !== expectedOffset;
 }
 
 // ---- Brevo transactional email log ----
@@ -125,10 +145,19 @@ async function fetchTransactionalEmails(apiKey, windowStart, windowEnd) {
     offset += limit;
   }
 
-  return results.filter((item) => {
-    const t = new Date(item.date).getTime();
-    return Number.isFinite(t) && t >= windowStart.getTime() && t < windowEnd.getTime();
+  let droppedCount = 0;
+  const emails = results.filter((item) => {
+    // `new Date(null)` coerces to the epoch instead of Invalid Date, so check
+    // for a missing value explicitly rather than relying on NaN alone.
+    const t = item.date == null ? NaN : new Date(item.date).getTime();
+    if (!Number.isFinite(t)) {
+      droppedCount += 1;
+      return false;
+    }
+    return t >= windowStart.getTime() && t < windowEnd.getTime();
   });
+
+  return { emails, droppedCount };
 }
 
 function labelFor(item) {
@@ -155,7 +184,11 @@ function escapeHtml(str) {
   }[ch]));
 }
 
-function buildHtmlReport({ periodHuman, total, groups, emails }) {
+function buildHtmlReport({ periodHuman, total, groups, emails, droppedCount }) {
+  const warning = droppedCount > 0
+    ? `<p style="color:#92400e; background:#fffbeb; border:1px solid #fcd34d; padding:8px 10px; border-radius:4px;">Warning: ${droppedCount} record(s) from Brevo had a missing or unreadable send time and were excluded from this report.</p>`
+    : '';
+
   const groupRows = groups.length
     ? groups
         .map(
@@ -176,6 +209,7 @@ function buildHtmlReport({ periodHuman, total, groups, emails }) {
 <body style="font-family: -apple-system, Segoe UI, Arial, sans-serif; color:#1a1a1a; max-width:640px; margin:0 auto; padding:16px;">
   <h2 style="margin-bottom:4px;">Brevo transactional email report</h2>
   <p style="margin-top:0; color:#555;">Reporting period: ${escapeHtml(periodHuman)}</p>
+  ${warning}
 
   <h3>Total</h3>
   <p>Total transactional emails sent: <strong>${total}</strong></p>
@@ -201,10 +235,15 @@ function buildHtmlReport({ periodHuman, total, groups, emails }) {
 </html>`;
 }
 
-function buildTextReport({ periodHuman, total, groups, emails }) {
+function buildTextReport({ periodHuman, total, groups, emails, droppedCount }) {
   const lines = [];
   lines.push('Brevo transactional email report');
   lines.push(`Reporting period: ${periodHuman}`);
+  if (droppedCount > 0) {
+    lines.push(
+      `Warning: ${droppedCount} record(s) from Brevo had a missing or unreadable send time and were excluded from this report.`
+    );
+  }
   lines.push('');
   lines.push(`Total transactional emails sent: ${total}`);
   lines.push('');
@@ -228,9 +267,8 @@ function buildTextReport({ periodHuman, total, groups, emails }) {
 
 async function main() {
   if (shouldSkipScheduledRun()) {
-    const nowLocal = getDenverParts(new Date());
     console.log(
-      `Skipping scheduled run: current America/Denver hour is ${nowLocal.hour}, not 22.`
+      `Skipping scheduled run: cron "${process.env.GITHUB_EVENT_SCHEDULE}" does not match today's actual America/Denver UTC offset.`
     );
     return;
   }
@@ -264,11 +302,20 @@ async function main() {
 
   console.log(`Reporting period: ${periodHuman}`);
 
-  const emails = await fetchTransactionalEmails(requiredEnv.BREVO_API_KEY, windowStart, windowEnd);
+  const { emails, droppedCount } = await fetchTransactionalEmails(
+    requiredEnv.BREVO_API_KEY,
+    windowStart,
+    windowEnd
+  );
   emails.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const total = emails.length;
   console.log(`Total transactional emails sent: ${total}`);
+  if (droppedCount > 0) {
+    console.warn(
+      `Warning: ${droppedCount} Brevo record(s) had a missing or unreadable send timestamp and were excluded.`
+    );
+  }
 
   const countsByLabel = new Map();
   for (const item of emails) {
@@ -299,8 +346,8 @@ async function main() {
     from: requiredEnv.REPORT_FROM,
     to: reportTo,
     subject,
-    text: buildTextReport({ periodHuman, total, groups, emails }),
-    html: buildHtmlReport({ periodHuman, total, groups, emails }),
+    text: buildTextReport({ periodHuman, total, groups, emails, droppedCount }),
+    html: buildHtmlReport({ periodHuman, total, groups, emails, droppedCount }),
   });
 
   const sent = Boolean(info.accepted && info.accepted.length > 0);
