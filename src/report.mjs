@@ -280,10 +280,12 @@ async function main() {
   const reportDateStr = formatYyyyMmDd(endDateParts);
   const subject = `Brevo report — ${reportDateStr} — ${total} emails sent`;
 
+  const smtpPort = Number(requiredEnv.SMTP_PORT);
   const transporter = nodemailer.createTransport({
     host: requiredEnv.SMTP_HOST,
-    port: Number(requiredEnv.SMTP_PORT),
-    secure: process.env.SMTP_SECURE === 'true',
+    port: smtpPort,
+    // Port 465 is implicit TLS; every other port (587, 25, ...) negotiates TLS via STARTTLS.
+    secure: smtpPort === 465,
     auth: { user: requiredEnv.SMTP_USER, pass: requiredEnv.SMTP_PASSWORD },
   });
 

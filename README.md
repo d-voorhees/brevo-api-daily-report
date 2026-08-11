@@ -67,7 +67,6 @@ Add each of these one at a time (see the [table below](#required-github-secrets)
 - `BREVO_API_KEY` — from step 2
 - `SMTP_HOST` — `smtp-relay.brevo.com`
 - `SMTP_PORT` — `587`
-- `SMTP_SECURE` — `false`
 - `SMTP_USER` — your Brevo SMTP login, from step 3
 - `SMTP_PASSWORD` — your Brevo SMTP key, from step 3
 - `REPORT_FROM` — the "from" address the report should be sent from (e.g. `reports@yourdomain.com`; should be a sender verified in Brevo)
@@ -109,8 +108,7 @@ Set these in the repository's **Settings → Secrets and variables → Actions**
 |---|---|
 | `BREVO_API_KEY` | Brevo API key, used to read the transactional email log. |
 | `SMTP_HOST` | e.g. `smtp-relay.brevo.com` |
-| `SMTP_PORT` | `587` or `465` |
-| `SMTP_SECURE` | `false` for port 587, `true` for port 465 |
+| `SMTP_PORT` | `587` or `465` — this alone determines the connection mode, see below |
 | `SMTP_USER` | Brevo SMTP login (not necessarily the API key) |
 | `SMTP_PASSWORD` | Brevo SMTP password/key (not necessarily the API key) |
 | `REPORT_FROM` | From address for the report email |
@@ -118,15 +116,16 @@ Set these in the repository's **Settings → Secrets and variables → Actions**
 
 ### SMTP port notes
 
-- **Port 587** (STARTTLS): set `SMTP_SECURE=false`.
-- **Port 465** (implicit TLS): set `SMTP_SECURE=true`.
+There's no separate "secure" secret to set. The script derives the connection mode from `SMTP_PORT` alone:
 
-For Brevo's own SMTP relay, the typical values are:
+- **Port 587** (STARTTLS): connects in plaintext, then upgrades to TLS. This is Brevo's recommended port.
+- **Port 465** (implicit TLS): connects with TLS from the start.
+
+For Brevo's own SMTP relay, the typical value is:
 
 ```env
 SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
-SMTP_SECURE=false
 ```
 
 ## Running manually
