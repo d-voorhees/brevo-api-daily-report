@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-08-10
+
+### Fixed
+
+- **Data fetch used the wrong Brevo endpoint entirely.** `GET /v3/smtp/emails` looked like the right transactional log, but Brevo requires it to be filtered by a specific `email`, `messageId`, or `templateId` — it can't list everything sent in a date range, which is what this report needs. Switched to `GET /v3/smtp/statistics/events` filtered to `event=requests`, which accepts a plain date range and returns one row per email actually sent (as opposed to separate rows for delivered/opened/clicked on the same email).
+- **`endDate` could land in the future and get rejected.** The date-range buffer added a full day past the window end to guard against Brevo's date-only filtering, which could push `endDate` to tomorrow. Brevo rejects any `endDate` later than its current date with a 400. The end-side buffer is now capped at the current instant instead of always adding a full day.
+- **Brevo API failures only logged a bare status code.** A failed request now includes Brevo's own `code`/`message` from the response body (never the full response), so a 400 or 401 says what Brevo actually objected to instead of just the number.
+
+### Added
+
+- README note on Brevo's **Authorised IPs** account setting: if enabled, it blocks API calls from GitHub Actions, since hosted runners don't have a fixed IP to allowlist. Needs to be turned off (or scoped to login only) for this project to run unattended.
+
 ## [1.1.0] - 2026-08-10
 
 ### Changed

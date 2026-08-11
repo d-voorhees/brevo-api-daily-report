@@ -4,7 +4,7 @@ A small script that emails you a nightly summary of transactional emails sent th
 
 For the reasoning behind the timezone handling and the pagination approach, see the [companion blog post](https://dvoorhees.com/2026/08/10/building-a-dst-safe-nightly-brevo-email-report-with-github-actions/).
 
-Current version: **1.1.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+Current version: **1.1.1**. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 ## What it does
 
