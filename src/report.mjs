@@ -115,9 +115,13 @@ function shouldSkipScheduledRun() {
 
 async function fetchTransactionalEmails(apiKey, windowStart, windowEnd) {
   // Brevo's startDate/endDate filters are date-only, so buffer a day on each
-  // side and filter precisely against the real timestamp on the client.
+  // side and filter precisely against the real timestamp on the client. Brevo
+  // also rejects an endDate later than its current date, so the end-side
+  // buffer is capped at "now" instead of always adding a full day.
+  const now = new Date();
   const bufferStart = new Date(windowStart.getTime() - 24 * 3600 * 1000);
-  const bufferEnd = new Date(windowEnd.getTime() + 24 * 3600 * 1000);
+  const bufferEndCandidate = new Date(windowEnd.getTime() + 24 * 3600 * 1000);
+  const bufferEnd = bufferEndCandidate.getTime() > now.getTime() ? now : bufferEndCandidate;
   const startDateParam = bufferStart.toISOString().slice(0, 10);
   const endDateParam = bufferEnd.toISOString().slice(0, 10);
 
