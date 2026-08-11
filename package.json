@@ -1,0 +1,16 @@
+{
+  "name": "brevo-api-daily-report",
+  "version": "1.0.0",
+  "description": "Nightly email report of Brevo transactional emails sent in a rolling 10PM-10PM Mountain Time window.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "report": "node src/report.mjs"
+  },
+  "dependencies": {
+    "nodemailer": "^9.0.5"
+  }
+}

@@ -1,0 +1,46 @@
+name: Brevo Daily Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      report_end_date:
+        description: "Report end date in America/Denver, YYYY-MM-DD"
+        required: false
+        type: string
+  schedule:
+    # 10:00 PM MDT, UTC-6
+    - cron: "0 4 * * *"
+    # 10:00 PM MST, UTC-7
+    - cron: "0 5 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run report
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          REPORT_FROM: ${{ secrets.REPORT_FROM }}
+          REPORT_TO: ${{ secrets.REPORT_TO }}
+          REPORT_END_DATE: ${{ github.event.inputs.report_end_date }}
+        run: npm run report
