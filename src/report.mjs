@@ -1,7 +1,11 @@
 import nodemailer from 'nodemailer';
 
 const DENVER_TZ = 'America/Denver';
-const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/emails';
+// /v3/smtp/emails requires a messageId/email/templateId filter and can't list
+// a plain date range. /v3/smtp/statistics/events accepts startDate/endDate
+// alone; filtering to event=requests gives one row per email actually sent,
+// as opposed to separate rows for delivered/opened/clicked on the same email.
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/statistics/events';
 
 // ---- Timezone helpers (DST-safe, no fixed UTC offset assumptions) ----
 
@@ -127,7 +131,7 @@ async function fetchTransactionalEmails(apiKey, windowStart, windowEnd) {
     url.searchParams.set('endDate', endDateParam);
     url.searchParams.set('limit', String(limit));
     url.searchParams.set('offset', String(offset));
-    url.searchParams.set('sort', 'asc');
+    url.searchParams.set('event', 'requests');
 
     const res = await fetch(url, {
       headers: { accept: 'application/json', 'api-key': apiKey },
@@ -150,7 +154,7 @@ async function fetchTransactionalEmails(apiKey, windowStart, windowEnd) {
     }
 
     const body = await res.json();
-    const page = Array.isArray(body.transactionalEmails) ? body.transactionalEmails : [];
+    const page = Array.isArray(body.events) ? body.events : [];
     results.push(...page);
 
     if (page.length < limit) break;

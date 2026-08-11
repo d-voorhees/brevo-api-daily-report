@@ -2,7 +2,7 @@
 
 A small script that emails you a nightly summary of transactional emails sent through Brevo.
 
-For the reasoning behind the timezone handling and the pagination approach, see the [companion blog post](INSERT-BLOG-URL-HERE).
+For the reasoning behind the timezone handling and the pagination approach, see the [companion blog post](https://dvoorhees.com/2026/08/10/building-a-dst-safe-nightly-brevo-email-report-with-github-actions/).
 
 Current version: **1.1.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
@@ -155,7 +155,7 @@ There is no automated test suite. The script's real dependencies are the Brevo A
 
 ## Tradeoffs and design decisions
 
-**Brevo's `/smtp/emails` log endpoint over the aggregated stats endpoint.** The aggregated report only returns totals, not who received what, and the detail list at the bottom needs per-recipient rows. The log endpoint's `startDate`/`endDate` filters are date-only, not timestamp-precise, so the script requests a day of buffer on each side and filters the exact 10 PM to 10 PM window client-side against each record's real timestamp.
+**`/smtp/statistics/events` over `/smtp/emails` or the aggregated stats endpoint.** `/smtp/emails` looks like the obvious choice for a transactional log, but it requires filtering by a specific `email`, `messageId`, or `templateId` — it can't list everything sent in a date range, which is exactly what this report needs. The aggregated stats endpoint only returns totals, not who received what. `/smtp/statistics/events` accepts a plain date range and, filtered to `event=requests`, returns one row per email actually sent (as opposed to separate rows for delivered/opened/clicked on that same email). Its `startDate`/`endDate` filters are date-only, not timestamp-precise, so the script requests a day of buffer on each side and filters the exact 10 PM to 10 PM window client-side against each record's real timestamp.
 
 **Two cron schedules instead of one.** GitHub Actions cron runs in UTC and does not shift for daylight saving time. Covering a fixed 10 PM Mountain Time target year-round means scheduling both the MDT and MST equivalents, with the script matching whichever one fired against Denver's actual current offset and skipping the one that doesn't match. GitHub Actions has no dynamic, timezone-aware cron option.
 
