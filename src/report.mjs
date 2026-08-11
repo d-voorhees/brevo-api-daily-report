@@ -134,6 +134,14 @@ async function fetchTransactionalEmails(apiKey, windowStart, windowEnd) {
     });
 
     if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error(
+          'Brevo API request failed with status 401 (unauthorized). BREVO_API_KEY was sent but Brevo rejected it. ' +
+            'Check: the GitHub secret value matches the key exactly (no truncation or extra whitespace from copy-paste), ' +
+            'the key has not been regenerated or deleted in Brevo since it was saved as a secret, ' +
+            'and the secret is actually named BREVO_API_KEY (GitHub secret names are case-sensitive).'
+        );
+      }
       throw new Error(`Brevo API request failed with status ${res.status}`);
     }
 
