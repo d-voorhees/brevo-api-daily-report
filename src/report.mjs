@@ -85,9 +85,9 @@ function resolveEndDateParts() {
   return { year: now.year, month: now.month, day: now.day };
 }
 
-function buildReportingWindow() {
+function buildReportingWindow(periodDays) {
   const endDateParts = resolveEndDateParts();
-  const startDateParts = addCalendarDays(endDateParts, -1);
+  const startDateParts = addCalendarDays(endDateParts, -periodDays);
 
   const windowEnd = denverWallTimeToUtc(endDateParts.year, endDateParts.month, endDateParts.day, 22, 0, 0);
   const windowStart = denverWallTimeToUtc(startDateParts.year, startDateParts.month, startDateParts.day, 22, 0, 0);
@@ -105,8 +105,10 @@ function buildReportingWindow() {
 // against today's real Denver offset. That check holds regardless of how
 // late the run starts, as long as it starts before the following day.
 const SCHEDULE_OFFSET_MINUTES = {
-  '0 4 * * *': -360, // MDT, UTC-6
-  '0 5 * * *': -420, // MST, UTC-7
+  '0 4 * * *': -360, // MDT, UTC-6 (nightly)
+  '0 5 * * *': -420, // MST, UTC-7 (nightly)
+  '0 4 * * 1': -360, // MDT, UTC-6 (weekly, Sunday 10PM)
+  '0 5 * * 1': -420, // MST, UTC-7 (weekly, Sunday 10PM)
 };
 
 function shouldSkipScheduledRun() {
@@ -204,6 +206,25 @@ function recipientFor(item) {
   return email || 'Unknown recipient';
 }
 
+// Splits a multi-day window into per-day (10PM-to-10PM Denver) counts, each
+// labeled by the day's end date, matching how a single nightly report is
+// dated by the date its window ends on.
+function buildDailyTotals(emails, startDateParts, periodDays) {
+  const totals = [];
+  for (let i = 0; i < periodDays; i++) {
+    const dayStartParts = addCalendarDays(startDateParts, i);
+    const dayEndParts = addCalendarDays(startDateParts, i + 1);
+    const dayStart = denverWallTimeToUtc(dayStartParts.year, dayStartParts.month, dayStartParts.day, 22, 0, 0);
+    const dayEnd = denverWallTimeToUtc(dayEndParts.year, dayEndParts.month, dayEndParts.day, 22, 0, 0);
+    const count = emails.filter((item) => {
+      const t = new Date(item.date).getTime();
+      return t >= dayStart.getTime() && t < dayEnd.getTime();
+    }).length;
+    totals.push({ label: formatYyyyMmDd(dayEndParts), count });
+  }
+  return totals;
+}
+
 // ---- Report rendering ----
 
 function escapeHtml(str) {
@@ -216,9 +237,29 @@ function escapeHtml(str) {
   }[ch]));
 }
 
-function buildHtmlReport({ periodHuman, total, groups, emails, droppedCount }) {
+function buildHtmlReport({ title, periodHuman, total, dailyTotals, groups, emails, droppedCount }) {
   const warning = droppedCount > 0
     ? `<p style="color:#92400e; background:#fffbeb; border:1px solid #fcd34d; padding:8px 10px; border-radius:4px;">Warning: ${droppedCount} record(s) from Brevo had a missing or unreadable send time and were excluded from this report.</p>`
+    : '';
+
+  const dailyTotalsSection = dailyTotals && dailyTotals.length
+    ? `<h3>Daily totals</h3>
+  <table style="border-collapse:collapse; width:100%; max-width:520px;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:6px 10px; border-bottom:2px solid #333;">Date</th>
+        <th style="text-align:right; padding:6px 10px; border-bottom:2px solid #333;">Count</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${dailyTotals
+        .map(
+          ({ label, count }) =>
+            `<tr><td style="padding:6px 10px;border-bottom:1px solid #e5e5e5;">${escapeHtml(label)}</td><td style="padding:6px 10px;border-bottom:1px solid #e5e5e5;text-align:right;">${count}</td></tr>`
+        )
+        .join('\n')}
+    </tbody>
+  </table>`
     : '';
 
   const groupRows = groups.length
@@ -239,12 +280,14 @@ function buildHtmlReport({ periodHuman, total, groups, emails, droppedCount }) {
   return `<!doctype html>
 <html>
 <body style="font-family: -apple-system, Segoe UI, Arial, sans-serif; color:#1a1a1a; max-width:640px; margin:0 auto; padding:16px;">
-  <h2 style="margin-bottom:4px;">Brevo transactional email report</h2>
+  <h2 style="margin-bottom:4px;">${escapeHtml(title)}</h2>
   <p style="margin-top:0; color:#555;">Reporting period: ${escapeHtml(periodHuman)}</p>
   ${warning}
 
   <h3>Total</h3>
   <p>Total transactional emails sent: <strong>${total}</strong></p>
+
+  ${dailyTotalsSection}
 
   <h3>Count by email type</h3>
   <table style="border-collapse:collapse; width:100%; max-width:520px;">
@@ -267,9 +310,9 @@ function buildHtmlReport({ periodHuman, total, groups, emails, droppedCount }) {
 </html>`;
 }
 
-function buildTextReport({ periodHuman, total, groups, emails, droppedCount }) {
+function buildTextReport({ title, periodHuman, total, dailyTotals, groups, emails, droppedCount }) {
   const lines = [];
-  lines.push('Brevo transactional email report');
+  lines.push(title);
   lines.push(`Reporting period: ${periodHuman}`);
   if (droppedCount > 0) {
     lines.push(
@@ -279,6 +322,11 @@ function buildTextReport({ periodHuman, total, groups, emails, droppedCount }) {
   lines.push('');
   lines.push(`Total transactional emails sent: ${total}`);
   lines.push('');
+  if (dailyTotals && dailyTotals.length) {
+    lines.push('Daily totals:');
+    for (const { label, count } of dailyTotals) lines.push(`  ${label}: ${count}`);
+    lines.push('');
+  }
   lines.push('Count by email type:');
   if (groups.length) {
     for (const [label, count] of groups) lines.push(`  ${label}: ${count}`);
@@ -318,7 +366,13 @@ async function main() {
     if (!value) throw new Error(`Missing required environment variable: ${name}`);
   }
 
-  const { windowStart, windowEnd, endDateParts } = buildReportingWindow();
+  const reportMode = (process.env.REPORT_MODE || 'daily').trim().toLowerCase();
+  if (reportMode !== 'daily' && reportMode !== 'weekly') {
+    throw new Error(`REPORT_MODE must be "daily" or "weekly", got: "${reportMode}"`);
+  }
+  const periodDays = reportMode === 'weekly' ? 7 : 1;
+
+  const { windowStart, windowEnd, endDateParts, startDateParts } = buildReportingWindow(periodDays);
 
   const humanFormatter = new Intl.DateTimeFormat('en-US', {
     timeZone: DENVER_TZ,
@@ -356,8 +410,14 @@ async function main() {
   }
   const groups = [...countsByLabel.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
+  const dailyTotals = periodDays > 1 ? buildDailyTotals(emails, startDateParts, periodDays) : null;
+
   const reportDateStr = formatYyyyMmDd(endDateParts);
-  const subject = `Brevo report — ${reportDateStr} — ${total} emails sent`;
+  const title = reportMode === 'weekly' ? 'Brevo weekly transactional email report' : 'Brevo transactional email report';
+  const subject =
+    reportMode === 'weekly'
+      ? `Brevo weekly report — week ending ${reportDateStr} — ${total} emails sent`
+      : `Brevo report — ${reportDateStr} — ${total} emails sent`;
 
   const smtpPort = Number(requiredEnv.SMTP_PORT);
   const transporter = nodemailer.createTransport({
@@ -378,8 +438,8 @@ async function main() {
     from: requiredEnv.REPORT_FROM,
     to: reportTo,
     subject,
-    text: buildTextReport({ periodHuman, total, groups, emails, droppedCount }),
-    html: buildHtmlReport({ periodHuman, total, groups, emails, droppedCount }),
+    text: buildTextReport({ title, periodHuman, total, dailyTotals, groups, emails, droppedCount }),
+    html: buildHtmlReport({ title, periodHuman, total, dailyTotals, groups, emails, droppedCount }),
   });
 
   const sent = Boolean(info.accepted && info.accepted.length > 0);

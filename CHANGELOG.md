@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-09-06
+
+### Added
+
+- **Weekly report.** A new `brevo-weekly-report.yml` workflow runs every Sunday night (10 PM Mountain Time, same dual MDT/MST cron approach as the nightly one) and calls the same `src/report.mjs` with `REPORT_MODE=weekly`, extending the window to 7 nights and adding a "Daily totals" section (one row per night) to the report. `workflow_dispatch` on the weekly workflow accepts the same `report_end_date` input, interpreted as the week-ending date.
+
 ## [1.1.2] - 2026-09-06
 
 ### Fixed

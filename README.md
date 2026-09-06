@@ -1,10 +1,10 @@
 # Brevo API Daily Report
 
-A small script that emails you a nightly summary of transactional emails sent through Brevo.
+A small script that emails you a nightly summary of transactional emails sent through Brevo, plus an optional weekly rollup.
 
 For the reasoning behind the timezone handling and the pagination approach, see the [companion blog post](https://dvoorhees.com/2026/08/10/building-a-dst-safe-nightly-brevo-email-report-with-github-actions/).
 
-Current version: **1.1.2**. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+Current version: **1.2.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 ## What it does
 
@@ -15,14 +15,17 @@ Once a night, a GitHub Action:
 3. Groups and counts them by subject, falling back to template ID, then "Untitled email."
 4. Emails a clean HTML report, with a plain-text fallback, via SMTP. A per-recipient detail list sits at the bottom.
 
+Once a week (Sunday night), a second GitHub Action runs the same script over a 7-day window instead of one night, adding a daily-totals breakdown to the same report format.
+
 No CSV/JSON files, database records, or repository commits get created. All data lives only in the outgoing report email.
 
 ## How it is structured
 
 ```
-src/report.mjs                            # the entire script: timezone math, Brevo fetch, HTML/text rendering, SMTP send
-.github/workflows/brevo-daily-report.yml  # nightly schedule + manual trigger
-.env.example                              # local dev config template
+src/report.mjs                             # the entire script: timezone math, Brevo fetch, HTML/text rendering, SMTP send
+.github/workflows/brevo-daily-report.yml   # nightly schedule + manual trigger
+.github/workflows/brevo-weekly-report.yml  # Sunday-night schedule + manual trigger, same script with REPORT_MODE=weekly
+.env.example                               # local dev config template
 ```
 
 Everything lives in one file. There is no framework, no build step, and no persistent storage. The script runs, computes a window, calls the Brevo API, sends one email, and exits.
@@ -104,6 +107,12 @@ A report generated on August 10 covers emails sent from Aug 9, 10:00 PM Mountain
 
 The script computes this window using the `America/Denver` IANA timezone directly, so it accounts for daylight saving time on its own. It never assumes a fixed UTC offset.
 
+If the run itself is delayed (GitHub Actions gives no on-time guarantee, and delays of several hours are common), the window still ends at the most recently *completed* 10 PM boundary, not "today's" — see [Scheduling notes](#scheduling-notes).
+
+## Weekly report
+
+The weekly workflow ([brevo-weekly-report.yml](.github/workflows/brevo-weekly-report.yml)) runs the same script with `REPORT_MODE=weekly`, which extends the window to the 7 nights ending at the most recently completed Sunday 10 PM boundary, and adds a **Daily totals** section to the report (one row per night in the window) above the existing "Count by email type" and "Details" sections. Everything else — the Brevo query, the grouping, the SMTP send — is identical to the nightly report.
+
 ## Required GitHub Secrets
 
 Set these in the repository's **Settings → Secrets and variables → Actions**:
@@ -134,17 +143,17 @@ SMTP_PORT=587
 
 ## Running manually
 
-Go to the repo's **Actions** tab → **Brevo Daily Report** → **Run workflow**.
+Go to the repo's **Actions** tab → **Brevo Daily Report** (or **Brevo Weekly Report**) → **Run workflow**.
 
 - Leave `report_end_date` blank to use the current reporting window.
-- Or enter a specific `YYYY-MM-DD` (interpreted as 10:00 PM Mountain Time on that date) to regenerate a report for a past window.
+- Or enter a specific `YYYY-MM-DD` (interpreted as 10:00 PM Mountain Time on that date; for the weekly workflow, the 7 nights ending on that date) to regenerate a report for a past window.
 - Manual runs always send a report, regardless of the current time.
 
 ## Scheduling notes
 
-- Two cron schedules fire every night, one written for MDT and one for MST. On each run, the script checks which cron triggered it (via `github.event.schedule`) against Denver's actual current UTC offset, and only the schedule matching today's real offset sends. The other exits without sending. This is what prevents duplicate reports.
-- That match is offset-based, not clock-based, so a late-starting run still sends correctly. GitHub Actions gives no guarantee that a scheduled job starts exactly on time; a delay of a few minutes is normal, and this design tolerates far longer delays without skipping the night.
-- The reporting window itself is always calculated from the intended 10:00 PM boundary, not the actual runner start time.
+- Two cron schedules fire on each workflow's cadence (nightly, or Sunday night for the weekly report), one written for MDT and one for MST. On each run, the script checks which cron triggered it (via `github.event.schedule`) against Denver's actual current UTC offset, and only the schedule matching today's real offset sends. The other exits without sending. This is what prevents duplicate reports.
+- That match is offset-based, not clock-based, so a late-starting run still sends correctly. GitHub Actions gives no guarantee that a scheduled job starts exactly on time, and delays of several hours are common in practice, not just a rare edge case.
+- The reporting window's end date resolves to the most recently *completed* 10:00 PM Mountain Time boundary, not "today." If a run is delayed past local midnight — which happens most nights — "today" would otherwise refer to a 10 PM boundary that hasn't happened yet, silently truncating the window to whatever few hours had already elapsed. Resolving to the last completed boundary instead means the window is always fully elapsed by the time it's queried, regardless of how late the run starts.
 
 ## Testing
 
