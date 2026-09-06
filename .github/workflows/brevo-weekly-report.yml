@@ -3,8 +3,8 @@ name: Brevo Weekly Report
 on:
   workflow_dispatch:
     inputs:
-      report_end_date:
-        description: "Week-ending date in America/Denver, YYYY-MM-DD (the report covers the 7 nights up to this date's 10 PM)"
+      report_end_date_YYYY-MM-DD:
+        description: "Week-ending date, America/Denver (e.g. 2026-09-06). Covers the 7 nights up to this date's 10 PM."
         required: false
         type: string
   schedule:
@@ -41,7 +41,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           REPORT_FROM: ${{ secrets.REPORT_FROM }}
           REPORT_TO: ${{ secrets.REPORT_TO }}
-          REPORT_END_DATE: ${{ github.event.inputs.report_end_date }}
+          REPORT_END_DATE: ${{ github.event.inputs['report_end_date_YYYY-MM-DD'] }}
           GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
           REPORT_MODE: weekly
         run: npm run report

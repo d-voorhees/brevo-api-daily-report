@@ -2,6 +2,8 @@
 
 A small script that emails you a nightly summary of transactional emails sent through Brevo, plus an optional weekly rollup.
 
+Both reports also run on demand, any time, via `gh workflow run "Brevo Daily Report"` or `gh workflow run "Brevo Weekly Report"` (or the **Run workflow** button on the Actions tab) — no need to wait for the schedule. See [Running manually](#running-manually).
+
 For the reasoning behind the timezone handling and the pagination approach, see the [companion blog post](https://dvoorhees.com/2026/08/10/building-a-dst-safe-nightly-brevo-email-report-with-github-actions/).
 
 Current version: **1.2.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
@@ -89,7 +91,7 @@ Go to the **Actions** tab of the repo. If prompted, click **I understand my work
 
 1. In the **Actions** tab, click **Brevo Daily Report** in the left sidebar.
 2. Click **Run workflow** (top right).
-3. Leave **report_end_date** blank to test with today's window, then click **Run workflow**.
+3. Leave **report_end_date_YYYY-MM-DD** blank to test with today's window, then click **Run workflow**.
 4. Click into the run to watch the logs. It should log the reporting period, total count, and whether SMTP sending succeeded. Check your inbox for the report.
 
 ### 7. Let it run on schedule
@@ -145,7 +147,7 @@ SMTP_PORT=587
 
 Go to the repo's **Actions** tab → **Brevo Daily Report** (or **Brevo Weekly Report**) → **Run workflow**.
 
-- Leave `report_end_date` blank to use the current reporting window.
+- Leave `report_end_date_YYYY-MM-DD` blank to use the current reporting window.
 - Or enter a specific `YYYY-MM-DD` (interpreted as 10:00 PM Mountain Time on that date; for the weekly workflow, the 7 nights ending on that date) to regenerate a report for a past window.
 - Manual runs always send a report, regardless of the current time.
 
@@ -160,7 +162,7 @@ Go to the repo's **Actions** tab → **Brevo Daily Report** (or **Brevo Weekly R
 There is no automated test suite. The script's real dependencies are the Brevo API and an SMTP server, and mocking both would mostly test the mocks. `node --check src/report.mjs` catches syntax errors; actual verification means running it for real:
 
 - Locally: `npm run report` against a `.env` file with real credentials sends a live report for the current window.
-- In GitHub Actions: run `workflow_dispatch` with an explicit `report_end_date` to regenerate a report for a known past window, then compare the total and counts against the Brevo dashboard.
+- In GitHub Actions: run `workflow_dispatch` with an explicit `report_end_date_YYYY-MM-DD` to regenerate a report for a known past window, then compare the total and counts against the Brevo dashboard.
 
 ## Tradeoffs and design decisions
 

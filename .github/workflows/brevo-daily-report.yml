@@ -3,8 +3,8 @@ name: Brevo Daily Report
 on:
   workflow_dispatch:
     inputs:
-      report_end_date:
-        description: "Report end date in America/Denver, YYYY-MM-DD"
+      report_end_date_YYYY-MM-DD:
+        description: "Report end date, America/Denver (e.g. 2026-09-06)"
         required: false
         type: string
   schedule:
@@ -41,6 +41,6 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           REPORT_FROM: ${{ secrets.REPORT_FROM }}
           REPORT_TO: ${{ secrets.REPORT_TO }}
-          REPORT_END_DATE: ${{ github.event.inputs.report_end_date }}
+          REPORT_END_DATE: ${{ github.event.inputs['report_end_date_YYYY-MM-DD'] }}
           GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
         run: npm run report
