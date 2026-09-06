@@ -70,6 +70,18 @@ function resolveEndDateParts() {
     return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
   }
   const now = getDenverParts(new Date());
+  // The reporting window always ends at 10:00 PM Denver time. GitHub Actions
+  // scheduled runs are frequently delayed several hours, often past local
+  // midnight, at which point "today" has already ticked forward and today's
+  // 10 PM boundary is still hours in the future. Building the window off
+  // that not-yet-elapsed boundary would report a mostly-empty sliver and
+  // permanently strand every email sent for the rest of the day, since
+  // there's no persisted state to backfill it on a later run. So: if it's
+  // currently before 10 PM Denver time, the most recently *completed*
+  // window ended at yesterday's 10 PM, not today's.
+  if (now.hour < 22) {
+    return addCalendarDays(now, -1);
+  }
   return { year: now.year, month: now.month, day: now.day };
 }
 

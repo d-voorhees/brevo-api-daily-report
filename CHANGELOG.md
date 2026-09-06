@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-09-06
+
+### Fixed
+
+- **Delayed scheduled runs silently undercounted or zeroed out the report, permanently.** `resolveEndDateParts()` derived "today" from the wall clock at actual execution time. GitHub Actions frequently delays scheduled runs by several hours; once a delayed run crossed Denver's local midnight, "today" ticked forward and the window's 10 PM end boundary was still hours in the future. The report then only covered the few hours between the prior 10 PM and whenever the run happened to fire (often 2-4 AM), undercounting or reporting zero, and — because there's no persisted state — the rest of that day's emails were never captured by any later run either. The window's end date now resolves to the most recently *completed* 10 PM Denver boundary (yesterday's, if it's currently before 10 PM Denver time) instead of always assuming "today," so it tolerates the same run delay the duplicate-send guard already does. Confirmed against live Brevo data: replaying the exact conditions of a run that reported 0 emails sent now correctly finds all 8 real sends for that window. Nights already reported under the old logic are not retroactively fixed — rerun `workflow_dispatch` with an explicit `report_end_date` for any date you want corrected.
+
 ## [1.1.1] - 2026-08-10
 
 ### Fixed
