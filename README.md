@@ -4,6 +4,8 @@ A small script that emails you a nightly summary of transactional emails sent th
 
 Both reports also run on demand, any time, via `gh workflow run "Brevo Daily Report"` or `gh workflow run "Brevo Weekly Report"` (or the **Run workflow** button on the Actions tab) — no need to wait for the schedule. See [Running manually](#running-manually).
 
+This repository runs the Brevo Daily Report on a schedule.
+
 For the reasoning behind the timezone handling and the pagination approach, see the [companion blog post](https://dvoorhees.com/2026/08/10/building-a-dst-safe-nightly-brevo-email-report-with-github-actions/).
 
 Current version: **1.2.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
